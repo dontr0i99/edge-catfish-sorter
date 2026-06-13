@@ -1,0 +1,15 @@
+# Catfish Sorting System V1 - Requirements
+# Install dengan: pip install -r requirements.txt --break-system-packages
+
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# System Monitoring
+psutil==5.9.8
+
+# Core (sudah ada sebelumnya)
+# ultralytics
+# opencv-python-headless  (atau opencv-python jika butuh cv2.imshow)
+# numpy
+# adafruit-circuitpython-servokit

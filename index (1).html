@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Catfish Sorting System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ════════════════════════════════════
+       CSS VARIABLES
+    ════════════════════════════════════ */
+    :root {
+      --bg:         #060810;
+      --surface:    #0c1018;
+      --panel:      #111620;
+      --border:     #1c2535;
+      --border2:    #243040;
+      --accent:     #00d4ff;
+      --accent-dim: rgba(0,212,255,0.12);
+      --green:      #39ff6a;
+      --green-dim:  rgba(57,255,106,0.12);
+      --orange:     #ff8c00;
+      --red:        #ff2244;
+      --text:       #b8c8d8;
+      --text-dim:   #4a6070;
+      --text-bright:#e8f4ff;
+      --mono:       'DM Mono', monospace;
+      --display:    'Orbitron', sans-serif;
+
+      /* layout heights — overridden by JS */
+      --header-h: 52px;
+      --footer-h: 56px;
+    }
+
+    /* ════════════════════════════════════
+       RESET & BASE
+    ════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ════════════════════════════════════
+       SCANLINE + VIGNETTE
+    ════════════════════════════════════ */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 9000;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          transparent, transparent 3px,
+          rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
+        );
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 9001;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+    }
+
+    /* ════════════════════════════════════
+       LAYOUT — FULLSCREEN FLEX COLUMN
+    ════════════════════════════════════ */
+    #app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100dvh; /* dynamic viewport height for mobile */
+      height: 100vh;
+    }
+
+    /* ════════════════════════════════════
+       HEADER
+    ════════════════════════════════════ */
+    #header {
+      flex: 0 0 auto;
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 100;
+    }
+
+    /* animated top accent line */
+    #header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: scan-h 4s linear infinite;
+    }
+
+    @keyframes scan-h {
+      0%   { background-position: -100% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .logo-mark {
+      width: 32px; height: 32px; flex-shrink: 0;
+    }
+
+    .logo-text {
+      display: flex; flex-direction: column; gap: 1px;
+    }
+
+    .logo-title {
+      font-family: var(--display);
+      font-size: clamp(0.6rem, 2vw, 0.78rem);
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .logo-sub {
+      font-size: clamp(0.5rem, 1.5vw, 0.6rem);
+      letter-spacing: 0.2em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex; align-items: center; gap: 16px;
+    }
+
+    /* ws badge */
+    .ws-badge {
+      font-size: 0.58rem;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      border-radius: 2px;
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+      transition: all 0.3s;
+    }
+    .ws-badge.live   { border-color: var(--green); color: var(--green); }
+    .ws-badge.warn   { border-color: var(--orange); color: var(--orange); }
+
+    /* system status pill */
+    .sys-pill {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--display);
+      font-size: clamp(0.55rem, 1.8vw, 0.68rem);
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      transition: color 0.3s;
+    }
+
+    .sys-pill.running { color: var(--green); }
+
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
+    .dot.running {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.3; }
+    }
+
+    /* ════════════════════════════════════
+       BODY — MAIN CONTENT AREA
+    ════════════════════════════════════ */
+    #body {
+      flex: 1 1 0;
+      min-height: 0;        /* critical for flex overflow */
+      display: grid;
+      /* desktop: video takes remaining space, sidebar fixed */
+      grid-template-columns: 1fr 280px;
+      grid-template-rows: 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* ════════════════════════════════════
+       VIDEO PANE
+    ════════════════════════════════════ */
+    #video-pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .pane-header {
+      flex: 0 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .pane-label {
+      font-family: var(--display);
+      font-size: 0.6rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .pane-tag {
+      font-size: 0.58rem;
+      letter-spacing: 0.1em;
+      padding: 2px 7px;
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+      border-radius: 2px;
+    }
+
+    .video-wrap {
+      flex: 1 1 0;
+      min-height: 0;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #video-feed {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* corner brackets */
+    .corner {
+      position: absolute;
+      width: clamp(14px, 2vw, 22px);
+      height: clamp(14px, 2vw, 22px);
+      border-color: var(--accent);
+      border-style: solid;
+      opacity: 0.6;
+    }
+    .corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+    .corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+    .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+    .corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+    /* fps overlay on video */
+    .video-fps {
+      position: absolute;
+      top: 14px; right: 18px;
+      font-family: var(--display);
+      font-size: clamp(0.6rem, 1.5vw, 0.75rem);
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 10px var(--accent);
+      opacity: 0.85;
+    }
+
+    /* REC indicator */
+    .rec-badge {
+      position: absolute;
+      top: 14px; left: 16px;
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.58rem;
+      letter-spacing: 0.15em;
+      color: var(--red);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .rec-badge.active { opacity: 1; }
+    .rec-badge .rec-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+      animation: blink 0.8s ease-in-out infinite;
+    }
+
+    /* ════════════════════════════════════
+       SIDEBAR
+    ════════════════════════════════════ */
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) transparent;
+      min-height: 0;
+    }
+
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* ── section divider ── */
+    .section {
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-family: var(--display);
+      font-size: 0.58rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    /* ── COUNTER ── */
+    .counter-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 12px 12px;
+      gap: 2px;
+      position: relative;
+    }
+
+    .counter-label {
+      font-size: 0.58rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .counter-value {
+      font-family: var(--display);
+      font-size: clamp(2.8rem, 6vw, 3.8rem);
+      font-weight: 900;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 30px rgba(0,212,255,0.35);
+      transition: transform 0.15s, color 0.15s;
+    }
+
+    .counter-value.bump {
+      transform: scale(1.1);
+      color: var(--text-bright);
+    }
+
+    .counter-unit {
+      font-size: 0.58rem;
+      letter-spacing: 0.18em;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    /* ── STAT ROWS ── */
+    .stat-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(28, 37, 53, 0.5);
+      gap: 8px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+
+    .stat-key {
+      font-size: 0.62rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .stat-right {
+      display: flex; align-items: center; gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .stat-val {
+      font-family: var(--display);
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .stat-val.c-accent  { color: var(--accent); }
+    .stat-val.c-green   { color: var(--green); }
+    .stat-val.c-orange  { color: var(--orange); }
+    .stat-val.c-red     { color: var(--red); }
+
+    /* mini bar */
+    .bar-track {
+      width: 60px; height: 3px;
+      background: var(--border2);
+      border-radius: 2px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 2px;
+      background: var(--accent);
+      transition: width 0.6s ease, background 0.4s;
+    }
+    .bar-fill.warm { background: var(--orange); }
+    .bar-fill.hot  { background: var(--red); }
+
+    /* servo badge */
+    .servo-badge {
+      font-family: var(--display);
+      font-size: 0.58rem;
+      letter-spacing: 0.1em;
+      padding: 2px 8px;
+      border: 1px solid var(--border2);
+      border-radius: 2px;
+      color: var(--text-dim);
+      transition: all 0.3s;
+    }
+    .servo-badge.READY   { border-color: var(--green); color: var(--green); }
+    .servo-badge.MOVING  { border-color: var(--accent); color: var(--accent); animation: blink 0.5s infinite; }
+    .servo-badge.TESTING { border-color: var(--orange); color: var(--orange); animation: blink 0.4s infinite; }
+    .servo-badge.ERROR   { border-color: var(--red); color: var(--red); }
+
+    /* ── CONTROLS ── */
+    .controls-block {
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .btn {
+      font-family: var(--display);
+      font-size: clamp(0.52rem, 1.2vw, 0.62rem);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 9px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-start {
+      grid-column: 1 / -1;
+      border-color: var(--green);
+      color: var(--green);
+      padding: 12px;
+      font-size: clamp(0.58rem, 1.4vw, 0.68rem);
+    }
+    .btn-start:not(:disabled):hover { background: var(--green-dim); }
+
+    .btn-stop {
+      grid-column: 1 / -1;
+      border-color: var(--red);
+      color: var(--red);
+      padding: 12px;
+      font-size: clamp(0.58rem, 1.4vw, 0.68rem);
+    }
+    .btn-stop:not(:disabled):hover { background: rgba(255,34,68,0.1); }
+
+    .btn-reset {
+      border-color: var(--orange);
+      color: var(--orange);
+    }
+    .btn-reset:not(:disabled):hover { background: rgba(255,140,0,0.08); }
+
+    .btn-servo {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .btn-servo:not(:disabled):hover { background: var(--accent-dim); }
+
+    .btn:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* ════════════════════════════════════
+       FOOTER BAR (mobile controls fallback)
+    ════════════════════════════════════ */
+    #footer {
+      display: none; /* shown on mobile */
+      flex: 0 0 auto;
+      height: var(--footer-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      z-index: 50;
+    }
+
+    #footer .btn {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 0.55rem;
+    }
+
+    /* ════════════════════════════════════
+       TOAST
+    ════════════════════════════════════ */
+    #toast {
+      position: fixed;
+      bottom: 20px; right: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border2);
+      border-left: 3px solid var(--accent);
+      padding: 9px 14px;
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      border-radius: 3px;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.22s;
+      pointer-events: none;
+      z-index: 9500;
+      max-width: 260px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ════════════════════════════════════
+       RESPONSIVE — TABLET (≤ 768px)
+       sidebar moves below video
+    ════════════════════════════════════ */
+    @media (max-width: 768px) {
+      :root {
+        --header-h: 48px;
+        --footer-h: 56px;
+      }
+
+      #body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      #video-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        /* let video fill nicely */
+        min-height: 180px;
+      }
+
+      #sidebar {
+        overflow: visible;
+        /* show full content, body scrolls */
+        max-height: none;
+      }
+
+      /* hide sidebar controls — use footer bar instead */
+      .section.controls-section { display: none; }
+
+      #footer {
+        display: flex;
+      }
+    }
+
+    /* ════════════════════════════════════
+       RESPONSIVE — PHONE (≤ 480px)
+    ════════════════════════════════════ */
+    @media (max-width: 480px) {
+      :root {
+        --header-h: 44px;
+        --footer-h: 52px;
+      }
+
+      .logo-mark { width: 26px; height: 26px; }
+      .logo-title { letter-spacing: 0.08em; }
+
+      .header-right { gap: 8px; }
+      .ws-badge { display: none; }
+
+      .counter-value { font-size: clamp(2.4rem, 14vw, 3.2rem); }
+
+      .bar-track { width: 48px; }
+    }
+
+    /* ════════════════════════════════════
+       RESPONSIVE — WIDE (≥ 1400px)
+       wider sidebar
+    ════════════════════════════════════ */
+    @media (min-width: 1400px) {
+      #body {
+        grid-template-columns: 1fr 320px;
+      }
+    }
+
+    /* ════════════════════════════════════
+       LANDSCAPE PHONE fix
+    ════════════════════════════════════ */
+    @media (max-height: 500px) and (orientation: landscape) {
+      :root { --header-h: 38px; --footer-h: 44px; }
+
+      .counter-value { font-size: 2rem; }
+      .counter-block { padding: 8px 12px 6px; }
+
+      .stat-row { padding: 5px 12px; }
+
+      #sidebar {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        overflow-y: auto;
+        max-height: none;
+      }
+
+      .section:last-child { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════ HEADER ══════════ -->
+  <header id="header">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="3" fill="#0c1018"/>
+        <path d="M4 16 Q8 10 16 16 Q24 22 28 16" stroke="#00d4ff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M4 13 Q8 7 16 13" stroke="#00d4ff" stroke-width="0.7" fill="none" stroke-linecap="round" opacity="0.3"/>
+        <circle cx="27" cy="12" r="1.8" fill="#39ff6a"/>
+        <path d="M5 20 L3 25 L8 22 Z" fill="#00d4ff" opacity="0.7"/>
+        <line x1="12" y1="20" x2="12" y2="24" stroke="#1c2535" stroke-width="1.2"/>
+        <line x1="16" y1="21" x2="16" y2="25" stroke="#1c2535" stroke-width="1.2"/>
+        <line x1="20" y1="20" x2="20" y2="24" stroke="#1c2535" stroke-width="1.2"/>
+      </svg>
+      <div class="logo-text">
+        <div class="logo-title">Catfish Sorting</div>
+        <div class="logo-sub">System Monitor V1</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="ws-badge" id="ws-badge">CONNECTING</span>
+      <div class="sys-pill" id="sys-pill">
+        <div class="dot" id="sys-dot"></div>
+        <span id="sys-label">IDLE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════ BODY ══════════ -->
+  <div id="body">
+
+    <!-- VIDEO PANE -->
+    <div id="video-pane">
+      <div class="pane-header">
+        <span class="pane-label">Live Detection Feed</span>
+        <span class="pane-tag" id="fps-tag">-- fps</span>
+      </div>
+      <div class="video-wrap">
+        <img id="video-feed" src="/video_feed" alt="video" />
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="video-fps" id="video-fps">--.-</div>
+        <div class="rec-badge" id="rec-badge">
+          <div class="rec-dot"></div>
+          REC
+        </div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- COUNTER -->
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">Fish Count</span>
+          <span class="pane-tag">BATCH</span>
+        </div>
+        <div class="counter-block">
+          <div class="counter-label">Total Detected</div>
+          <div class="counter-value" id="stat-total">0</div>
+          <div class="counter-unit">EKOR &nbsp;/&nbsp; TAIL</div>
+        </div>
+      </div>
+
+      <!-- SYSTEM STATS -->
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">System Stats</span>
+          <span class="pane-tag" id="ws-tag2">—</span>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">CPU Temp</span>
+          <div class="stat-right">
+            <div class="bar-track"><div class="bar-fill" id="bar-temp" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-temp">-- °C</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">CPU Usage</span>
+          <div class="stat-right">
+            <div class="bar-track"><div class="bar-fill" id="bar-cpu" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-cpu">-- %</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">RAM Usage</span>
+          <div class="stat-right">
+            <div class="bar-track"><div class="bar-fill" id="bar-ram" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-ram">-- %</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">FPS</span>
+          <div class="stat-right">
+            <span class="stat-val c-accent" id="stat-fps">--</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">Servo</span>
+          <div class="stat-right">
+            <span class="servo-badge" id="stat-servo">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTROLS (sidebar — desktop) -->
+      <div class="section controls-section">
+        <div class="section-head">
+          <span class="section-title">Controls</span>
+          <span class="pane-tag">MANUAL</span>
+        </div>
+        <div class="controls-block">
+          <button class="btn btn-start" id="btn-start-s" onclick="startDetection()">
+            ▶ Start Detection
+          </button>
+          <button class="btn btn-stop" id="btn-stop-s" onclick="stopDetection()" disabled>
+            ■ Stop Detection
+          </button>
+          <button class="btn btn-reset" onclick="resetCounter()">↺ Reset</button>
+          <button class="btn btn-servo" onclick="servoTest()">⚙ Servo Test</button>
+        </div>
+      </div>
+
+    </div><!-- /sidebar -->
+  </div><!-- /body -->
+
+  <!-- ══════════ FOOTER (mobile controls) ══════════ -->
+  <div id="footer">
+    <button class="btn btn-start" id="btn-start-f" onclick="startDetection()">▶ Start</button>
+    <button class="btn btn-stop"  id="btn-stop-f"  onclick="stopDetection()" disabled>■ Stop</button>
+    <button class="btn btn-reset" onclick="resetCounter()">↺</button>
+    <button class="btn btn-servo" onclick="servoTest()">⚙</button>
+  </div>
+
+</div><!-- /app -->
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+  // ── WEBSOCKET ──
+  let ws = null, wsRetry = 0, prevTotal = 0;
+
+  function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      wsRetry = 0;
+      setBadge('ws-badge',  'LIVE',      'live');
+      setBadge('ws-tag2',   'LIVE',      'live');
+    };
+
+    ws.onmessage = (e) => updateStats(JSON.parse(e.data));
+
+    ws.onclose = () => {
+      setBadge('ws-badge', 'RECONNECT', 'warn');
+      setBadge('ws-tag2',  'OFFLINE',   'warn');
+      wsRetry++;
+      setTimeout(connectWS, Math.min(1000 * wsRetry, 8000));
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  function setBadge(id, text, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = (id === 'ws-badge') ? `ws-badge ${cls}` : `pane-tag ${cls === 'live' ? '' : 'warn'}`;
+  }
+
+  function updateStats(d) {
+    // Counter
+    const totalEl = document.getElementById('stat-total');
+    if (d.total_fish !== prevTotal) {
+      totalEl.classList.add('bump');
+      setTimeout(() => totalEl.classList.remove('bump'), 180);
+      prevTotal = d.total_fish;
+    }
+    totalEl.textContent = d.total_fish;
+
+    // FPS
+    const fps = (+d.fps).toFixed(1);
+    document.getElementById('stat-fps').textContent = fps;
+    document.getElementById('fps-tag').textContent  = fps + ' fps';
+    document.getElementById('video-fps').textContent = fps;
+
+    // CPU Temp
+    const t = +d.cpu_temp;
+    const tEl = document.getElementById('stat-temp');
+    const bT  = document.getElementById('bar-temp');
+    tEl.textContent = t.toFixed(1) + ' °C';
+    bT.style.width  = Math.min((t / 90) * 100, 100) + '%';
+    bT.className = 'bar-fill' + (t > 75 ? ' hot' : t > 60 ? ' warm' : '');
+    tEl.className = 'stat-val' + (t > 75 ? ' c-red' : t > 60 ? ' c-orange' : '');
+
+    // CPU Usage
+    const c = +d.cpu_usage;
+    document.getElementById('stat-cpu').textContent = c.toFixed(0) + ' %';
+    const bC = document.getElementById('bar-cpu');
+    bC.style.width  = c + '%';
+    bC.className = 'bar-fill' + (c > 85 ? ' hot' : c > 70 ? ' warm' : '');
+
+    // RAM
+    const r = +d.ram_usage;
+    document.getElementById('stat-ram').textContent = r.toFixed(0) + ' %';
+    const bR = document.getElementById('bar-ram');
+    bR.style.width  = r + '%';
+    bR.className = 'bar-fill' + (r > 85 ? ' hot' : r > 70 ? ' warm' : '');
+
+    // Servo
+    const sv = document.getElementById('stat-servo');
+    sv.textContent = d.servo_status;
+    sv.className   = 'servo-badge ' + d.servo_status;
+
+    // System state
+    const running = !!d.detection_enabled;
+    const dot = document.getElementById('sys-dot');
+    const pill = document.getElementById('sys-pill');
+    const lbl  = document.getElementById('sys-label');
+    dot.className  = 'dot'      + (running ? ' running' : '');
+    pill.className = 'sys-pill' + (running ? ' running' : '');
+    lbl.textContent = running ? 'RUNNING' : 'IDLE';
+
+    // REC badge on video
+    document.getElementById('rec-badge').className = 'rec-badge' + (running ? ' active' : '');
+
+    // Buttons — sync all instances
+    ['btn-start-s','btn-start-f'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = running;
+    });
+    ['btn-stop-s','btn-stop-f'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !running;
+    });
+  }
+
+  // ── API ──
+  async function apiPost(url, msg) {
+    try {
+      const r = await fetch(url, { method: 'POST' });
+      const d = await r.json();
+      showToast(msg || d.message);
+    } catch(e) {
+      showToast('ERR: ' + e.message, true);
+    }
+  }
+
+  function startDetection() { apiPost('/start_detection', '▶ Detection started'); }
+  function stopDetection()  { apiPost('/stop_detection',  '■ Detection stopped'); }
+  function resetCounter()   { apiPost('/reset_counter',   '↺ Counter reset'); }
+  function servoTest()      { apiPost('/servo_test',      '⚙ Servo test: 40→80→40°'); }
+
+  // ── TOAST ──
+  let _tt = null;
+  function showToast(msg, err = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderLeftColor = err ? 'var(--red)' : 'var(--accent)';
+    t.classList.add('show');
+    clearTimeout(_tt);
+    _tt = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  connectWS();
+</script>
+</body>
+</html>

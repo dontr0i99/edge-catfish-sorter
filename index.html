@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catfish Sorting System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0a0c0f;
+      --panel:     #10141a;
+      --border:    #1e2730;
+      --accent:    #00e5ff;
+      --accent2:   #76ff03;
+      --warn:      #ff6d00;
+      --danger:    #ff1744;
+      --muted:     #37474f;
+      --text:      #cfd8dc;
+      --text-dim:  #546e7a;
+      --mono:      'Share Tech Mono', monospace;
+      --sans:      'Barlow', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── SCANLINE overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+    }
+
+    .logo h1 {
+      font-family: var(--sans);
+      font-weight: 900;
+      font-size: 1.05rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .logo span {
+      font-size: 0.7rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      display: block;
+      margin-top: -2px;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    .status-dot.running { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 1.5s infinite; }
+    .status-dot.idle    { background: var(--muted); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    #status-label {
+      color: var(--text-dim);
+      transition: color 0.3s;
+    }
+
+    #status-label.running { color: var(--accent2); }
+
+    /* ── MAIN GRID ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 16px;
+      padding: 16px 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    /* ── PANEL BASE ── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .panel-tag {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      color: var(--text-dim);
+    }
+
+    /* ── VIDEO ── */
+    .video-panel .panel-header { padding: 10px 16px; }
+
+    .video-wrap {
+      position: relative;
+      background: #000;
+      aspect-ratio: 16/9;
+    }
+
+    #video-feed {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .video-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      /* corner brackets */
+    }
+
+    .video-overlay::before,
+    .video-overlay::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: var(--accent);
+      border-style: solid;
+    }
+
+    .video-overlay::before { top: 8px; left: 8px; border-width: 2px 0 0 2px; }
+    .video-overlay::after  { top: 8px; right: 8px; border-width: 2px 2px 0 0; }
+
+    .video-overlay-br, .video-overlay-bl {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: var(--accent);
+      border-style: solid;
+    }
+
+    .video-overlay-br { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
+    .video-overlay-bl { bottom: 8px; left: 8px; border-width: 0 0 2px 2px; }
+
+    .video-no-signal {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* ── STATS COLUMN ── */
+    .stats-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── FISH COUNTER (big) ── */
+    .fish-counter {
+      padding: 20px 16px;
+      text-align: center;
+      position: relative;
+    }
+
+    .fish-counter-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .fish-counter-value {
+      font-family: var(--mono);
+      font-size: 4rem;
+      font-weight: 400;
+      color: var(--accent);
+      line-height: 1;
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+      transition: all 0.2s;
+    }
+
+    .fish-counter-value.bump {
+      transform: scale(1.08);
+      color: #fff;
+    }
+
+    .fish-unit {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      margin-top: 4px;
+    }
+
+    /* ── STAT ROWS ── */
+    .stat-list {
+      padding: 8px 0;
+    }
+
+    .stat-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      border-bottom: 1px solid rgba(30, 39, 48, 0.6);
+      transition: background 0.15s;
+    }
+
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row:hover { background: rgba(0, 229, 255, 0.03); }
+
+    .stat-key {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .stat-val {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--text);
+      letter-spacing: 0.05em;
+    }
+
+    .stat-val.accent  { color: var(--accent); }
+    .stat-val.good    { color: var(--accent2); }
+    .stat-val.warn    { color: var(--warn); }
+    .stat-val.danger  { color: var(--danger); }
+
+    /* ── BAR METER ── */
+    .bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bar-track {
+      width: 80px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.5s ease, background 0.3s;
+    }
+
+    .bar-fill.warm  { background: var(--warn); }
+    .bar-fill.hot   { background: var(--danger); }
+
+    /* ── SERVO STATUS ── */
+    .servo-badge {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      padding: 2px 10px;
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      transition: all 0.3s;
+    }
+
+    .servo-badge.READY   { border-color: var(--accent2); color: var(--accent2); }
+    .servo-badge.MOVING  { border-color: var(--accent); color: var(--accent); animation: pulse 0.5s infinite; }
+    .servo-badge.TESTING { border-color: var(--warn); color: var(--warn); animation: pulse 0.4s infinite; }
+    .servo-badge.ERROR   { border-color: var(--danger); color: var(--danger); }
+
+    /* ── CONTROLS ── */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 14px;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 10px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: currentColor;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover::after { opacity: 0.06; }
+    .btn:active::after { opacity: 0.12; }
+
+    .btn-start {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      grid-column: span 2;
+      padding: 14px;
+      font-size: 0.8rem;
+    }
+
+    .btn-start:hover { background: rgba(118, 255, 3, 0.07); }
+
+    .btn-stop {
+      border-color: var(--danger);
+      color: var(--danger);
+      grid-column: span 2;
+      padding: 14px;
+      font-size: 0.8rem;
+    }
+
+    .btn-stop:hover  { background: rgba(255, 23, 68, 0.07); }
+
+    .btn-reset { border-color: var(--warn); color: var(--warn); }
+    .btn-reset:hover { background: rgba(255, 109, 0, 0.07); }
+
+    .btn-servo { border-color: var(--accent); color: var(--accent); }
+    .btn-servo:hover { background: rgba(0, 229, 255, 0.07); }
+
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 10px 16px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      border-radius: 3px;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: all 0.25s;
+      pointer-events: none;
+      z-index: 1000;
+      max-width: 280px;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">
+    <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="4" fill="#10141a"/>
+      <path d="M6 18 Q10 12 18 18 Q26 24 30 18" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+      <circle cx="28" cy="14" r="2" fill="#76ff03"/>
+      <path d="M8 22 L6 26 L10 24 Z" fill="#00e5ff"/>
+    </svg>
+    <div>
+      <h1>Catfish Sorting</h1>
+      <span>System Monitor V1</span>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot idle" id="status-dot"></div>
+    <span id="status-label">IDLE</span>
+  </div>
+</header>
+
+<!-- ── MAIN GRID ── -->
+<div class="main-grid">
+
+  <!-- VIDEO -->
+  <div class="panel video-panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Detection Feed</span>
+      <span class="panel-tag" id="fps-tag">-- fps</span>
+    </div>
+    <div class="video-wrap">
+      <img id="video-feed" src="/video_feed" alt="Video Feed" />
+      <div class="video-overlay">
+        <div class="video-overlay-br"></div>
+        <div class="video-overlay-bl"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS + CONTROLS -->
+  <div class="stats-col">
+
+    <!-- FISH COUNTER -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Fish Count</span>
+        <span class="panel-tag">BATCH</span>
+      </div>
+      <div class="fish-counter">
+        <div class="fish-counter-label">Total Detected</div>
+        <div class="fish-counter-value" id="stat-total">0</div>
+        <div class="fish-unit">EKOR / TAIL</div>
+      </div>
+    </div>
+
+    <!-- SYSTEM STATS -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">System Stats</span>
+        <span class="panel-tag" id="ws-tag">CONNECTING…</span>
+      </div>
+      <div class="stat-list">
+
+        <div class="stat-row">
+          <span class="stat-key">CPU Temp</span>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill" id="bar-temp" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-temp">--°C</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">CPU Usage</span>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill" id="bar-cpu" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-cpu">--%</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">RAM Usage</span>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill" id="bar-ram" style="width:0%"></div></div>
+            <span class="stat-val" id="stat-ram">--%</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">FPS</span>
+          <span class="stat-val accent" id="stat-fps">--</span>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-key">Servo</span>
+          <span class="servo-badge" id="stat-servo">--</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Controls</span>
+        <span class="panel-tag">MANUAL</span>
+      </div>
+      <div class="controls-grid">
+        <button class="btn btn-start" id="btn-start" onclick="startDetection()">▶ Start Detection</button>
+        <button class="btn btn-stop"  id="btn-stop"  onclick="stopDetection()"  disabled>■ Stop Detection</button>
+        <button class="btn btn-reset" onclick="resetCounter()">↺ Reset Counter</button>
+        <button class="btn btn-servo" onclick="servoTest()">⚙ Servo Test</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+  // ── WEBSOCKET ──
+  let ws = null;
+  let wsRetry = 0;
+  let prevTotal = 0;
+
+  function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      wsRetry = 0;
+      document.getElementById('ws-tag').textContent = 'LIVE';
+      document.getElementById('ws-tag').style.color = 'var(--accent2)';
+    };
+
+    ws.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      updateStats(d);
+    };
+
+    ws.onclose = () => {
+      document.getElementById('ws-tag').textContent = 'RECONNECT…';
+      document.getElementById('ws-tag').style.color = 'var(--warn)';
+      wsRetry++;
+      const delay = Math.min(1000 * wsRetry, 8000);
+      setTimeout(connectWS, delay);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  function updateStats(d) {
+    // Total fish with bump animation
+    const totalEl = document.getElementById('stat-total');
+    if (d.total_fish !== prevTotal) {
+      totalEl.classList.add('bump');
+      setTimeout(() => totalEl.classList.remove('bump'), 200);
+      prevTotal = d.total_fish;
+    }
+    totalEl.textContent = d.total_fish;
+
+    // FPS
+    const fps = d.fps.toFixed(1);
+    document.getElementById('stat-fps').textContent = fps;
+    document.getElementById('fps-tag').textContent = fps + ' fps';
+
+    // CPU Temp
+    const temp = d.cpu_temp;
+    const tempEl = document.getElementById('stat-temp');
+    const barTemp = document.getElementById('bar-temp');
+    tempEl.textContent = temp + '°C';
+    const tempPct = Math.min((temp / 90) * 100, 100);
+    barTemp.style.width = tempPct + '%';
+    barTemp.className = 'bar-fill' + (temp > 75 ? ' hot' : temp > 60 ? ' warm' : '');
+    tempEl.className = 'stat-val' + (temp > 75 ? ' danger' : temp > 60 ? ' warn' : '');
+
+    // CPU Usage
+    const cpu = d.cpu_usage;
+    document.getElementById('stat-cpu').textContent = cpu.toFixed(0) + '%';
+    const barCpu = document.getElementById('bar-cpu');
+    barCpu.style.width = cpu + '%';
+    barCpu.className = 'bar-fill' + (cpu > 85 ? ' hot' : cpu > 70 ? ' warm' : '');
+
+    // RAM
+    const ram = d.ram_usage;
+    document.getElementById('stat-ram').textContent = ram.toFixed(0) + '%';
+    const barRam = document.getElementById('bar-ram');
+    barRam.style.width = ram + '%';
+    barRam.className = 'bar-fill' + (ram > 85 ? ' hot' : ram > 70 ? ' warm' : '');
+
+    // Servo
+    const servoEl = document.getElementById('stat-servo');
+    servoEl.textContent = d.servo_status;
+    servoEl.className = 'servo-badge ' + d.servo_status;
+
+    // System status
+    const dot = document.getElementById('status-dot');
+    const lbl = document.getElementById('status-label');
+    const running = d.detection_enabled;
+    dot.className = 'status-dot ' + (running ? 'running' : 'idle');
+    lbl.className = running ? 'running' : '';
+    lbl.textContent = running ? 'RUNNING' : 'IDLE';
+
+    // Button states
+    document.getElementById('btn-start').disabled = running;
+    document.getElementById('btn-stop').disabled  = !running;
+  }
+
+  // ── API CALLS ──
+  async function apiPost(endpoint, successMsg) {
+    try {
+      const res = await fetch(endpoint, { method: 'POST' });
+      const data = await res.json();
+      showToast(successMsg || data.message);
+    } catch (e) {
+      showToast('Error: ' + e.message, true);
+    }
+  }
+
+  function startDetection() { apiPost('/start_detection', '▶ Detection started'); }
+  function stopDetection()  { apiPost('/stop_detection',  '■ Detection stopped'); }
+  function resetCounter()   { apiPost('/reset_counter',   '↺ Counter reset to 0'); }
+  function servoTest()      { apiPost('/servo_test',      '⚙ Servo test: 40→80→40°'); }
+
+  // ── TOAST ──
+  let toastTimer = null;
+
+  function showToast(msg, isError = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── INIT ──
+  connectWS();
+</script>
+</body>
+</html>
