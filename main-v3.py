@@ -28,11 +28,11 @@ import uvicorn
 # KONFIGURASI
 # =============================
 
-MODEL_PATH = "../yolo26_fp16_ncnn_model"
+MODEL_PATH = "../yolo26_ncnn_model"
 
-CONF_THRESHOLD = 0.7
+CONF_THRESHOLD = 0.60
 YOLO_INTERVAL = 1
-SERVO_COOLDOWN = 0.5
+SERVO_COOLDOWN = 0.2
 
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 360
@@ -46,14 +46,14 @@ FRAME_TIME = 1.0 / TARGET_FPS
 
 ROI_X1 = 80
 ROI_Y1 = 70
-ROI_X2 = 560
+ROI_X2 = 640
 ROI_Y2 = 285
 
 # =============================
 # GARIS TRIGGER
 # =============================
 
-TRIGGER_LINE_X = int(FRAME_WIDTH * 0.8)
+TRIGGER_LINE_X = int(FRAME_WIDTH * 0.75)
 
 # =============================
 # SERVO PCA9685
@@ -168,8 +168,9 @@ total_anomali = 0
 current_fps   = 0.0
 last_servo_time = 0
 
-processed_ids  = set()
-last_positions = {}
+processed_ids     = set()
+last_positions    = {}
+seen_left_of_line = set()  # IDs yang pernah terlihat di kiri trigger line
 
 grade_stabilizer = GradeStabilizer()
 
@@ -191,7 +192,7 @@ def set_servo_nonblocking(angle_start, angle_end):
         try:
             servo_status = "MOVING"
             kit.servo[SERVO_CHANNEL].angle = angle_start
-            time.sleep(0.5)
+            time.sleep(0.7)
             kit.servo[SERVO_CHANNEL].angle = angle_end
             time.sleep(0.3)
             servo_status = "READY"
@@ -391,29 +392,32 @@ def detection_loop():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2,
                             )
 
-                            # crossing detection
-                            if obj_id in last_positions:
-                                prev_x = last_positions[obj_id]
-                                if prev_x < TRIGGER_LINE_X and cx >= TRIGGER_LINE_X:
-                                    if obj_id not in processed_ids:
-                                        now = time.time()
-                                        if now - last_servo_time > SERVO_COOLDOWN:
-                                            processed_ids.add(obj_id)
-                                            last_servo_time = now
+                            # catat ID yang terlihat di kiri garis
+                            if cx < TRIGGER_LINE_X:
+                                seen_left_of_line.add(obj_id)
 
-                                            total_fish += 1
-                                            if stable_label == "normal":
-                                                total_normal += 1
-                                            elif stable_label == "anomali":
-                                                total_anomali += 1
+                            # crossing: ID ini pernah terlihat kiri, sekarang sudah kanan
+                            if cx >= TRIGGER_LINE_X and obj_id in seen_left_of_line:
+                                if obj_id not in processed_ids:
+                                    now = time.time()
+                                    if now - last_servo_time > SERVO_COOLDOWN:
+                                        processed_ids.add(obj_id)
+                                        seen_left_of_line.discard(obj_id)
+                                        last_servo_time = now
 
-                                            print(
-                                                f"[INFO] {stable_label} ID {obj_id} lewat | "
-                                                f"Normal: {total_normal}  Anomali: {total_anomali}  "
-                                                f"Total: {total_fish}"
-                                            )
-                                            if stable_label == "anomali":
-                                                set_servo_nonblocking(105, 10)
+                                        total_fish += 1
+                                        if stable_label == "normal":
+                                            total_normal += 1
+                                        elif stable_label == "anomali":
+                                            total_anomali += 1
+
+                                        print(
+                                            f"[INFO] {stable_label} ID {obj_id} lewat | "
+                                            f"Normal: {total_normal}  Anomali: {total_anomali}  "
+                                            f"Total: {total_fish}"
+                                        )
+                                        if stable_label == "anomali":
+                                            set_servo_nonblocking(105, 10)
 
                             last_positions[obj_id] = cx
 
@@ -532,6 +536,7 @@ async def reset_counter():
     total_anomali = 0
     processed_ids.clear()
     last_positions.clear()
+    seen_left_of_line.clear()
     grade_stabilizer.reset()
     print("[API] Counter RESET")
     return {"status": "ok", "message": "Counter reset"}
